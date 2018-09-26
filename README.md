@@ -1,4 +1,4 @@
 # Eye-Gaze-Tracking
 
-wheel file to install dlib
-dat file having the facial landmarks
+1. wheel file to install dlib
+2. dat file having the facial landmarks
