@@ -5,10 +5,11 @@ import numpy as np
 import imutils
 import dlib
 import cv2
+import math
 
 # Constants for controlling the Blink Frequency.
 blinkThreshold = 0.3
-blink_Consec_frames = 3
+blinkFrameThresh = 3
 blinkCounter = 0
 blinks = 0
 
@@ -43,19 +44,22 @@ while camera.isOpened():
 	if ret == False:
 		break
 
+	# Used for FPS calculation
+	startTime = cv2.getTickCount()
+
 	# Load frame from webcam, resize and convert to grayscale
 	frame = imutils.resize(frame, width=500)
 	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
 	# Detect faces in frame
-	rects = detector(gray, 1)
+	faces = detector(gray, 1)
 
 	# loop over the face detections
-	for (i, rect) in enumerate(rects):
+	for (i, face) in enumerate(faces):
 		# determine the facial landmarks for the face region, then
 		# convert the facial landmark (x, y)-coordinates to a NumPy
 		# array
-		shape = predictor(gray, rect)
+		shape = predictor(gray, face)
 		shape = face_utils.shape_to_np(shape)
 
 		# grab the indexes of the facial landmarks for the left and
@@ -63,24 +67,33 @@ while camera.isOpened():
 		(lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
 		(rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
 
+		# Get coordinates of 6 eye features
 		leftEye = shape[lStart:lEnd]
 		rightEye = shape[rStart:rEnd]
+		# Calulate ratio of eyes
 		leftEyeRatio = eyeRatio(leftEye)
 		rightEyeRatio = eyeRatio(rightEye)
 
+		# Calculate average eye aspect ratio
 		averageEyeRatio = (leftEyeRatio + rightEyeRatio)/2.0
 
+
+		leftCorner = leftEye[0]
+		rightCorner = leftEye[3]
+
+		angle = math.atan((leftCorner[1]-rightCorner[1]) / (leftCorner[0]-rightCorner[0])) 
+		print(angle)
+
 		if(averageEyeRatio < blinkThreshold):
-			blinkCounter+=1
+			blinkCounter += 1
 		else:
-			if blinkCounter>=blink_Consec_frames:
-				blinks+=1
+			if blinkCounter >= blinkFrameThresh:
+				blinks += 1
 
 			blinkCounter = 0
 
-		# convert dlib's rectangle to a OpenCV-style bounding box
-		# [i.e., (x, y, w, h)], then draw the face bounding box
-		(x, y, w, h) = face_utils.rect_to_bb(rect)
+		# Get bounding box coordinates
+		(x, y, w, h) = face_utils.rect_to_bb(face)
 		cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
 		cv2.drawContours(frame, [cv2.convexHull(leftEye)], -1, (255, 0, 0), 1)
@@ -100,6 +113,13 @@ while camera.isOpened():
 		# and draw them on the image
 		for (x, y) in shape:
 			cv2.circle(frame, (x, y), 1, (0, 0, 255), -1)
+
+	# Calculate frames per second (fps)
+	fps = int(cv2.getTickFrequency() / (cv2.getTickCount() - startTime))
+	
+	cv2.putText(frame, "FPS: {}".format(fps), (10, 265),
+				cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
 
 	cv2.imshow("WebCam", frame)
 	if cv2.waitKey(1) & 0xFF == 27:
