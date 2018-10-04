@@ -7,23 +7,26 @@ import dlib
 import cv2
 
 # Constants for controlling the Blink Frequency.
-ear_Treshold = 0.3
+blinkThreshold = 0.3
 blink_Consec_frames = 3
-counter = 0
+blinkCounter = 0
 blinks = 0
 
-def eye_aspect_ratio(eye):
-	# compute the euclidean distances for the vertical eye landmarks (x, y)-coordinates
-	A = dist.euclidean(eye[1], eye[5])
-	B = dist.euclidean(eye[2], eye[4])
+def eyeRatio(eye):
+	# Possibly replace euclidean() with manual calculation
 
-	# compute the euclidean distance for horizontal eye landmark (x, y)-coordinates
-	C = dist.euclidean(eye[0], eye[3])
+	# Calculate average height of eye
+	h1 = dist.euclidean(eye[1], eye[5])
+	h2 = dist.euclidean(eye[2], eye[4])
+	heightAverage = (h1 + h2) / 2.0
 
-	# compute the eye aspect ratio
-	ear = (A + B) / (2.0 * C)
+	# Calculate width of eye
+	width = dist.euclidean(eye[0], eye[3])
 
-	return ear
+	# Calculate the eye aspect ratio
+	ratio = heightAverage / width
+
+	return ratio
 
 
 # initialize dlib's face detector (HOG-based) and then create
@@ -40,11 +43,11 @@ while camera.isOpened():
 	if ret == False:
 		break
 
-	# load the input image, resize it, and convert it to grayscale
+	# Load frame from webcam, resize and convert to grayscale
 	frame = imutils.resize(frame, width=500)
 	gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-	# detect faces in the grayscale image
+	# Detect faces in frame
 	rects = detector(gray, 1)
 
 	# loop over the face detections
@@ -60,28 +63,28 @@ while camera.isOpened():
 		(lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
 		(rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
 
-		left_eye = shape[lStart:lEnd]
-		right_eye = shape[rStart:rEnd]
-		left_ear = eye_aspect_ratio(left_eye)
-		right_ear = eye_aspect_ratio(right_eye)
+		leftEye = shape[lStart:lEnd]
+		rightEye = shape[rStart:rEnd]
+		leftEyeRatio = eyeRatio(leftEye)
+		rightEyeRatio = eyeRatio(rightEye)
 
-		avg_ear = (left_ear + right_ear)/2.0
+		averageEyeRatio = (leftEyeRatio + rightEyeRatio)/2.0
 
-		if(avg_ear < ear_Treshold):
-			counter+=1
+		if(averageEyeRatio < blinkThreshold):
+			blinkCounter+=1
 		else:
-			if counter>=blink_Consec_frames:
+			if blinkCounter>=blink_Consec_frames:
 				blinks+=1
 
-			counter = 0
+			blinkCounter = 0
 
 		# convert dlib's rectangle to a OpenCV-style bounding box
 		# [i.e., (x, y, w, h)], then draw the face bounding box
 		(x, y, w, h) = face_utils.rect_to_bb(rect)
 		cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-		cv2.drawContours(frame, [cv2.convexHull(left_eye)], -1, (255, 0, 0), 1)
-		cv2.drawContours(frame, [cv2.convexHull(right_eye)], -1, (255, 0, 0), 1)
+		cv2.drawContours(frame, [cv2.convexHull(leftEye)], -1, (255, 0, 0), 1)
+		cv2.drawContours(frame, [cv2.convexHull(rightEye)], -1, (255, 0, 0), 1)
 
 		# show the face number
 		cv2.putText(frame, "Face #{}".format(i + 1), (x - 10, y - 10),
@@ -90,7 +93,7 @@ while camera.isOpened():
 		cv2.putText(frame, "Blinks: {}".format(blinks), (10, 30),
 		            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-		cv2.putText(frame, "EAR: {}".format(avg_ear), (300, 30),
+		cv2.putText(frame, "Eye Ratio: {}".format(averageEyeRatio), (300, 30),
 		            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 		# loop over the (x, y)-coordinates for the facial landmarks
