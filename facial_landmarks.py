@@ -46,15 +46,16 @@ def eyeRegion(eye):
     
     return frame[ymin:ymax, xmin:xmax]
 
-def adjust_gamma(image, gamma=1.0):
+def gammaCorrection(image, gamma=1.0):
     # build a lookup table mapping the pixel values [0, 255] to
     # their adjusted gamma values
-    invGamma = 1.0 / gamma
-    table = np.array([((i / 255.0) ** invGamma) * 255
-        for i in np.arange(0, 256)]).astype("uint8")
+    gamma = 1.0 / gamma
+    lookupTable = np.array([((i / 255.0) ** gamma) * 255
+    for i in np.arange(0, 256)]).astype("uint8")
  
-    # apply gamma correction using the lookup table
-    return cv2.LUT(image, table)
+    gammaCorrected = cv2.LUT(image, lookupTable)
+    
+    return gammaCorrected
 
 def get_iris_center(image, eye, gamma=1.0):
     # Increased size to width of 100 for better results
@@ -63,7 +64,7 @@ def get_iris_center(image, eye, gamma=1.0):
     img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # Gamma correction
-    img = adjust_gamma(img, gamma)
+    img = gammaCorrection(img, gamma)
 
     # Return to caller to adjust gamma in future call
     meanAfterGamma = cv2.mean(img)[0]
