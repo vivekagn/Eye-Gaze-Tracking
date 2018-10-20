@@ -46,11 +46,10 @@ def eyeRegion(eye):
     
     return frame[ymin:ymax, xmin:xmax]
 
-def gammaCorrection(image, gamma=1.0):
-    # build a lookup table mapping the pixel values [0, 255] to
-    # their adjusted gamma values
-    gamma = 1.0 / gamma
-    lookupTable = np.array([((i / 255.0) ** gamma) * 255
+def gammaCorrection(image, gamma):
+    gammaInverse = 1.0 / gamma
+    # Lookup table to 
+    lookupTable = np.array([((i / 255.0) ** gammaInverse) * 255
     for i in np.arange(0, 256)]).astype("uint8")
  
     gammaCorrected = cv2.LUT(image, lookupTable)
@@ -91,6 +90,8 @@ def get_iris_center(image, eye, gamma=1.0):
     thresh[thresh == 0] = 127
     thresh[thresh == 255] = 0
     thresh[thresh == 127] = 255
+    # X and Y coordinates of centre of iris
+    cX = cY = 0
     
     cv2.imshow("{} Eye threshold".format(eye), thresh)
 
@@ -99,7 +100,7 @@ def get_iris_center(image, eye, gamma=1.0):
     
     # Check if contour is found
     if len(cnts) == 0:
-        return meanAfterGamma
+        return meanAfterGamma, (0, 0)
     c = max(cnts, key=cv2.contourArea)
     if cv2.contourArea(c) > 0:
         # Get center of the contour
@@ -123,8 +124,8 @@ def get_iris_center(image, eye, gamma=1.0):
         # print("radius ratio = {}. x = {}, y = {}. Area = {}, Length = {}".format(radiusRatio, cX, cY, contourArea, arcLength))
 
         # reject contour if circularity is out of acceptable range
-        if circularity > 1.4 or circularity < 0.75:
-            return meanAfterGamma
+        if circularity > 1.5 or circularity < 0.70:
+            return meanAfterGamma, (0, 0)
 
         cv2.circle(image, (cX, cY), 5, (255, 255, 255), -1)
         
@@ -134,7 +135,9 @@ def get_iris_center(image, eye, gamma=1.0):
 
     cv2.waitKey(1)
 
-    return meanAfterGamma
+    # Return mean intensity after gammma correction,
+    # relative x, y coordinates of the centre of the iris
+    return meanAfterGamma, (cX / 100, cY / len(image[:]))
 
 
 # initialize dlib's face detector (HOG-based) and then create
@@ -156,8 +159,13 @@ gamma = 1.0
 # Initial mean intensity of eye region
 mean = 0
 
+screenWidth = 1400
+controlArea = np.ones((100, screenWidth, 3) , np.uint8) * 255
+
 while camera.isOpened():
     ret, frame = camera.read()
+
+    cv2.imshow("Control Area", controlArea)
 
     if ret == False:
         break
@@ -205,7 +213,19 @@ while camera.isOpened():
                 gamma -= 0.02
             elif mean < 30:
                 gamma += 0.02
-            mean = get_iris_center(rEye, "Right", gamma=gamma)
+            mean, (x, y) = get_iris_center(rEye, "Right", gamma=gamma)
+            if x != 0 and y != 0:
+                print("X = {}, Y = {}".format(int(x * 100), int(y * 100)))
+                # Clear control area
+                controlArea[:,:,:] = 255
+                x = int(x * 100)
+                # 35, 60 are locations in eye region corresponding to looking left and right on screen
+                # Will need to add in a calibration so these aren't hard coded in
+                if x < 35: x = 35
+                if x > 60: x = 60
+                # Map x to location in control area
+                xControl = screenWidth - int((x - 35) * (screenWidth / 25))
+                cv2.circle(controlArea, (xControl, 50), 20, (0,0,255), -1)
         
         # Calculate average eye aspect ratio
         averageEyeRatio = (leftEyeRatio + rightEyeRatio)/2.0
