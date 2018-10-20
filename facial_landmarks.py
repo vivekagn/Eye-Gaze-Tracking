@@ -46,42 +46,94 @@ def eyeRegion(eye):
     
     return frame[ymin:ymax, xmin:xmax]
 
-def get_iris_center(image):
+def adjust_gamma(image, gamma=1.0):
+    # build a lookup table mapping the pixel values [0, 255] to
+    # their adjusted gamma values
+    invGamma = 1.0 / gamma
+    table = np.array([((i / 255.0) ** invGamma) * 255
+        for i in np.arange(0, 256)]).astype("uint8")
+ 
+    # apply gamma correction using the lookup table
+    return cv2.LUT(image, table)
+
+def get_iris_center(image, eye, gamma=1.0):
+    # Increased size to width of 100 for better results
+    image = imutils.resize(image, width=100)
+    # Convert to grayscale
     img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    #img = cv2.medianBlur(img,5)
-    #thresh = cv2.adaptiveThreshold(img,255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,15,2)
+
+    # Gamma correction
+    img = adjust_gamma(img, gamma)
+
+    # Return to caller to adjust gamma in future call
+    meanAfterGamma = cv2.mean(img)[0]
+
+    img = cv2.GaussianBlur(img, (5,5), 0)
+
+    # Normalise image after gamma correction
+    cv2.normalize(img, img, 0, 255, cv2.NORM_MINMAX)
+
+    cv2.imshow("normalised", img)
+
+    # Binarise image
     _,thresh = cv2.threshold(img,40,255,cv2.THRESH_BINARY)
-    #kernel = np.ones((3,3),np.uint8)
-    #closed = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
     
-    #diff = thresh - closed
+    # Closing
+    # kernel = np.ones((3,3),np.uint8)
+    # thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+
+    # Opening
+    # kernel = np.ones((5,5),np.uint8)
+    # thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+
+    # Invert binarisation
     thresh[thresh == 0] = 127
     thresh[thresh == 255] = 0
     thresh[thresh == 127] = 255
     
+    cv2.imshow("{} Eye threshold".format(eye), thresh)
+
     cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if imutils.is_cv2() else cnts[1]
     
     # Check if contour is found
     if len(cnts) == 0:
-        return
+        return meanAfterGamma
     c = max(cnts, key=cv2.contourArea)
     if cv2.contourArea(c) > 0:
         # Get center of the contour
         M = cv2.moments(c)
         cX = int(M["m10"] / M["m00"])
         cY = int(M["m01"] / M["m00"])
-        cv2.circle(image, (cX, cY), 2, (255, 255, 255), -1)
+
+        arcLength = cv2.arcLength(c, True)
+        contourArea = cv2.contourArea(c)
+        Pi = 3.14159
+        # Calculate approximate radius based on arc length of contour
+        # L = 2  * Pi * r
+        radiusL = arcLength / (2 * Pi)
+        radiusLSquared = radiusL * radiusL
+        # Calculate approximate radius based on area of contour
+        # A = Pi * r^2
+        radiusASquared = contourArea / Pi
+        # Use the ratio of radii from arc length and area to determine circularity of contour
+        circularity = radiusLSquared / radiusASquared
+
+        # print("radius ratio = {}. x = {}, y = {}. Area = {}, Length = {}".format(radiusRatio, cX, cY, contourArea, arcLength))
+
+        # reject contour if circularity is out of acceptable range
+        if circularity > 1.4 or circularity < 0.75:
+            return meanAfterGamma
+
+        cv2.circle(image, (cX, cY), 5, (255, 255, 255), -1)
         
         cv2.drawContours(image, [c], 0, (0, 255, 0), 1)
-    #for c in cnts:
-    #    cv2.drawContours(image, [c], 0, (0, 255, 0), 1)
     
-    cv2.imshow("Eye", image)
-    cv2.imshow("Thresh", thresh)
-    #cv2.imshow("Closed", closed)
-    #cv2.imshow("Diff", diff)
+    cv2.imshow("{} Eye".format(eye), image)
+
     cv2.waitKey(1)
+
+    return meanAfterGamma
 
 
 # initialize dlib's face detector (HOG-based) and then create
@@ -98,6 +150,11 @@ if len(sys.argv[:]) == 2:
 else:
     camera = cv2.VideoCapture(0)
 
+# Initial gamma
+gamma = 1.0
+# Initial mean intensity of eye region
+mean = 0
+
 while camera.isOpened():
     ret, frame = camera.read()
 
@@ -108,7 +165,7 @@ while camera.isOpened():
     startTime = cv2.getTickCount()
 
     # Load frame from webcam, resize and convert to grayscale
-    frame = imutils.resize(frame, width=500)
+    frame = imutils.resize(frame, width=600)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     # Detect faces in frame
@@ -137,10 +194,17 @@ while camera.isOpened():
         # Get left and right eye
         lEye = eyeRegion(leftEye)
         rEye = eyeRegion(rightEye)
-        
+
         # Get center of each eye
-        get_iris_center(lEye)
-        get_iris_center(rEye)
+        # if leftEyeRatio > 0.3:
+            # get_iris_center(lEye, "Left")
+        if rightEyeRatio > 0.25:
+            # Adjust gamma to suit brightness
+            if mean > 35:
+                gamma -= 0.02
+            elif mean < 30:
+                gamma += 0.02
+            mean = get_iris_center(rEye, "Right", gamma=gamma)
         
         # Calculate average eye aspect ratio
         averageEyeRatio = (leftEyeRatio + rightEyeRatio)/2.0
@@ -149,24 +213,15 @@ while camera.isOpened():
         leftCorner = leftEye[0]
         rightCorner = leftEye[3]
 
-        angle = math.atan((leftCorner[1]-rightCorner[1]) / (leftCorner[0]-rightCorner[0])) 
-        #print(angle)
+        angle = math.atan((leftCorner[1]-rightCorner[1]) / (leftCorner[0]-rightCorner[0]))
     
-        # Calculate blink score based on how closed eye is
+        # Calculate blink score based on eye aspect ratio
         if averageEyeRatio < 0.32:
             score += (0.35 - averageEyeRatio)
         else:
             if score > 0.10:
                 blinks += 1
             score = 0
-
-#         if(averageEyeRatio < blinkThreshold):
-#             blinkCounter += 1
-#         else:
-#             if blinkCounter >= blinkFrameThresh:
-#                 blinks += 1
-
-#             blinkCounter = 0
 
         # Get bounding box coordinates
         (x, y, w, h) = face_utils.rect_to_bb(face)
