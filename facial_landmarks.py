@@ -139,14 +139,22 @@ while camera.isOpened():
 
         angle = math.atan((leftCorner[1]-rightCorner[1]) / (leftCorner[0]-rightCorner[0])) 
         #print(angle)
+	
+	# Calculate blink score based on how closed eye is
+	if averageEyeRatio < 0.32:
+		score += (0.35 - averageEyeRatio)
+	else:
+		if score > 0.10:
+			blinks += 1
+		score = 0
 
-        if(averageEyeRatio < blinkThreshold):
-            blinkCounter += 1
-        else:
-            if blinkCounter >= blinkFrameThresh:
-                blinks += 1
+#         if(averageEyeRatio < blinkThreshold):
+#             blinkCounter += 1
+#         else:
+#             if blinkCounter >= blinkFrameThresh:
+#                 blinks += 1
 
-            blinkCounter = 0
+#             blinkCounter = 0
 
         # Get bounding box coordinates
         (x, y, w, h) = face_utils.rect_to_bb(face)
