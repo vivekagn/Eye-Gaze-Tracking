@@ -6,12 +6,14 @@ import imutils
 import dlib
 import cv2
 import math
+import sys
 
 # Constants for controlling the Blink Frequency.
 blinkThreshold = 0.3
 blinkFrameThresh = 3
 blinkCounter = 0
 blinks = 0
+score = 0
 
 def eyeRatio(eye):
     # Possibly replace euclidean() with manual calculation
@@ -59,6 +61,10 @@ def get_iris_center(image):
     
     cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if imutils.is_cv2() else cnts[1]
+    
+    # Check if contour is found
+    if len(cnts) == 0:
+        return
     c = max(cnts, key=cv2.contourArea)
     if cv2.contourArea(c) > 0:
         # Get center of the contour
@@ -83,8 +89,14 @@ def get_iris_center(image):
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
+# Use sample video
+if len(sys.argv[:]) == 2:
+    filename = sys.argv[1]
+    camera = cv2.VideoCapture(filename)
+
 # Use Webcam
-camera = cv2.VideoCapture(0)
+else:
+    camera = cv2.VideoCapture(0)
 
 while camera.isOpened():
     ret, frame = camera.read()
@@ -96,7 +108,7 @@ while camera.isOpened():
     startTime = cv2.getTickCount()
 
     # Load frame from webcam, resize and convert to grayscale
-    #frame = imutils.resize(frame, width=500)
+    frame = imutils.resize(frame, width=500)
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     # Detect faces in frame
