@@ -12,6 +12,7 @@ blinkThreshold = 0.3
 blinkFrameThresh = 3
 blinkCounter = 0
 blinks = 0
+score = 0
 
 def eyeRatio(eye):
 	# Possibly replace euclidean() with manual calculation
@@ -77,20 +78,29 @@ while camera.isOpened():
 		# Calculate average eye aspect ratio
 		averageEyeRatio = (leftEyeRatio + rightEyeRatio)/2.0
 
+		print(averageEyeRatio)
 
 		leftCorner = leftEye[0]
 		rightCorner = leftEye[3]
 
+		# Rotation (roll) of head
 		angle = math.atan((leftCorner[1]-rightCorner[1]) / (leftCorner[0]-rightCorner[0])) 
-		print(angle)
+		# print(angle)
 
-		if(averageEyeRatio < blinkThreshold):
-			blinkCounter += 1
+		if averageEyeRatio < 0.32:
+			score += (0.35 - averageEyeRatio)
 		else:
-			if blinkCounter >= blinkFrameThresh:
+			if score > 0.10:
 				blinks += 1
+			score = 0
 
-			blinkCounter = 0
+		# if averageEyeRatio < blinkThreshold:
+		# 	blinkCounter += 1
+		# else:
+		# 	blinkCounter = 0
+
+		# if blinkCounter >= blinkFrameThresh:
+		# 	blinks += 1
 
 		# Get bounding box coordinates
 		(x, y, w, h) = face_utils.rect_to_bb(face)
