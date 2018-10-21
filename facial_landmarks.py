@@ -124,7 +124,7 @@ def get_iris_center(image, eye, gamma=1.0):
         # print("radius ratio = {}. x = {}, y = {}. Area = {}, Length = {}".format(radiusRatio, cX, cY, contourArea, arcLength))
 
         # reject contour if circularity is out of acceptable range
-        if circularity > 1.5 or circularity < 0.70:
+        if circularity > 1.8 or circularity < 0.70:
             return meanAfterGamma, (0, 0)
 
         cv2.circle(image, (cX, cY), 5, (255, 255, 255), -1)
@@ -170,6 +170,8 @@ while camera.isOpened():
     if ret == False:
         break
 
+    xL = yL = xR = yR = 0
+
     # Used for FPS calculation
     startTime = cv2.getTickCount()
 
@@ -205,27 +207,50 @@ while camera.isOpened():
         rEye = eyeRegion(rightEye)
 
         # Get center of each eye
-        # if leftEyeRatio > 0.3:
-            # get_iris_center(lEye, "Left")
+        if leftEyeRatio > 0.25:
+            get_iris_center(lEye, "Left")
+            # Adjust gamma to suit brightness
+            if mean > 80:
+                gamma -= 0.02
+            elif mean < 70:
+                gamma += 0.02
+            meanL, (xL, yL) = get_iris_center(lEye, "Left", gamma=gamma)
+            mean += meanL
+            mean = mean / 2
+
         if rightEyeRatio > 0.25:
             # Adjust gamma to suit brightness
-            if mean > 35:
+            if mean > 80:
                 gamma -= 0.02
-            elif mean < 30:
+            elif mean < 70:
                 gamma += 0.02
-            mean, (x, y) = get_iris_center(rEye, "Right", gamma=gamma)
-            if x != 0 and y != 0:
-                print("X = {}, Y = {}".format(int(x * 100), int(y * 100)))
-                # Clear control area
-                controlArea[:,:,:] = 255
-                x = int(x * 100)
-                # 35, 60 are locations in eye region corresponding to looking left and right on screen
-                # Will need to add in a calibration so these aren't hard coded in
-                if x < 35: x = 35
-                if x > 60: x = 60
-                # Map x to location in control area
-                xControl = screenWidth - int((x - 35) * (screenWidth / 25))
-                cv2.circle(controlArea, (xControl, 50), 20, (0,0,255), -1)
+            meanR, (xR, yR) = get_iris_center(rEye, "Right", gamma=gamma)
+            mean += meanR
+            mean = mean / 2
+
+        # print("{} {}".format(mean,gamma)) 
+        
+
+        if xL > 0 and xR > 0:
+            x = int((xL + xR) * 50)
+            print("Left x: {}, y: {} Right x: {}, y: {}".format(int(xL * 100), int(yL * 100), int(xR * 100), int(yR * 100)))
+        elif xL > 0:
+            x = int(xL * 100)
+        elif xR > 0:
+            x = int(xR * 100)
+        else:
+            x = 0
+
+        if x != 0:
+            # Clear control area
+            controlArea[:,:,:] = 255
+            # 35, 60 are locations in eye region corresponding to looking left and right on screen
+            # Will need to add in a calibration so these aren't hard coded in
+            if x < 40: x = 40
+            if x > 60: x = 60
+            # Map x to location in control area
+            xControl = screenWidth - int((x - 40) * (screenWidth / 20))
+            cv2.circle(controlArea, (xControl, 50), 20, (0,0,255), -1)
         
         # Calculate average eye aspect ratio
         averageEyeRatio = (leftEyeRatio + rightEyeRatio)/2.0
