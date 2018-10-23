@@ -42,9 +42,8 @@ class Helper:
 		return frame[ymin:ymax, xmin:xmax]
 
 	def gammaCorrection(self, image, gamma):
-		gammaInverse = 1.0 / gamma
 		# Lookup table to
-		lookupTable = np.array([((i / 255.0) ** gammaInverse) * 255
+		lookupTable = np.array([((i / 255.0) ** gamma) * 255
 		                        for i in np.arange(0, 256)]).astype("uint8")
 
 		gammaCorrected = cv2.LUT(image, lookupTable)

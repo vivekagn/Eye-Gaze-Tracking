@@ -99,9 +99,9 @@ class EyeGaze:
 					self.helper.get_iris_center(lEye, "Left")
 					# Adjust gamma to suit brightness
 					if self.meanLeft > self.meanUpper:
-						self.gammaLeft -= 0.02
-					elif self.meanLeft < self.meanLower:
 						self.gammaLeft += 0.02
+					elif self.meanLeft < self.meanLower:
+						self.gammaLeft -= 0.02
 					meanL, (xL, yL) = self.helper.get_iris_center(lEye, "Left", gamma=self.gammaLeft)
 					self.meanLeft += meanL
 					self.meanLeft = self.meanLeft / 2
@@ -109,9 +109,9 @@ class EyeGaze:
 				if rightEyeRatio > 0.25:
 					# Adjust gamma to suit brightness
 					if self.meanRight > self.meanUpper:
-						self.gammaRight -= 0.02
-					elif self.meanRight < self.meanLower:
 						self.gammaRight += 0.02
+					elif self.meanRight < self.meanLower:
+						self.gammaRight -= 0.02
 					meanR, (xR, yR) = self.helper.get_iris_center(rEye, "Right", gamma=self.gammaRight)
 					self.meanRight += meanR
 					self.meanRight = self.meanRight / 2
