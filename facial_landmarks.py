@@ -16,8 +16,10 @@ class EyeGaze:
 		self.blinkThreshold = 0.3
 		self.blinkFrameThresh = 3
 		self.blinkFrameCounter = 0
+		self.leftEyeWinkCounter = 0
+		self.rightEyeWinkCounter = 0
 		self.blinks = 0
-		self.score = 0
+		self.blinkScore = 0
 
 		# initialize dlib's face detector (HOG-based) and then create
 		# the facial landmark predictor
@@ -27,9 +29,15 @@ class EyeGaze:
 		self.color = (0,225,0)
 
 		# Initial gamma
-		self.gamma = 1.0
+		self.gammaLeft = 1.0
+		self.gammaRight = 1.0
 		# Initial mean intensity of eye region
-		self.mean = 0
+		self.meanLeft = 0
+		self.meanRight = 0
+
+		# Upper and lower bounds of mean
+		self.meanUpper = 80
+		self.meanLower = 70
 
 		self.screenWidth = 1400
 		self.controlArea = np.ones((100, self.screenWidth, 3), np.uint8) * 255
@@ -90,26 +98,26 @@ class EyeGaze:
 				if leftEyeRatio > 0.25:
 					self.helper.get_iris_center(lEye, "Left")
 					# Adjust gamma to suit brightness
-					if self.mean > 80:
-						self.gamma -= 0.02
-					elif self.mean < 70:
-						self.gamma += 0.02
-					meanL, (xL, yL) = self.helper.get_iris_center(lEye, "Left", gamma=self.gamma)
-					self.mean += meanL
-					self.mean = self.mean / 2
+					if self.meanLeft > self.meanUpper:
+						self.gammaLeft -= 0.02
+					elif self.meanLeft < self.meanLower:
+						self.gammaLeft += 0.02
+					meanL, (xL, yL) = self.helper.get_iris_center(lEye, "Left", gamma=self.gammaLeft)
+					self.meanLeft += meanL
+					self.meanLeft = self.meanLeft / 2
 
 				if rightEyeRatio > 0.25:
 					# Adjust gamma to suit brightness
-					if self.mean > 80:
-						self.gamma -= 0.02
-					elif self.mean < 70:
-						self.gamma += 0.02
-					meanR, (xR, yR) = self.helper.get_iris_center(rEye, "Right", gamma=self.gamma)
-					self.mean += meanR
-					self.mean = self.mean / 2
+					if self.meanRight > self.meanUpper:
+						self.gammaRight -= 0.02
+					elif self.meanRight < self.meanLower:
+						self.gammaRight += 0.02
+					meanR, (xR, yR) = self.helper.get_iris_center(rEye, "Right", gamma=self.gammaRight)
+					self.meanRight += meanR
+					self.meanRight = self.meanRight / 2
 
 				# print("{} {}".format(mean,gamma))
-
+				print("xL = {}, xR = {}".format(int(xL), int(xR)))
 
 				if xL > 0 and xR > 0:
 					x = int((xL + xR) * 50)
@@ -142,16 +150,39 @@ class EyeGaze:
 
 				angle = math.atan((leftCorner[1] - rightCorner[1]) / (leftCorner[0] - rightCorner[0]))
 
-				# Calculate blink score based on eye aspect ratio
+				# Calculate blinkScore based on eye aspect ratio
 				if averageEyeRatio < self.blinkThreshold:
-					self.score += (0.35 - averageEyeRatio)
+					self.blinkScore += (self.blinkThreshold - averageEyeRatio)
+					self.blinkFrameCounter += 1
+				
+				# Not blinking, check for winks
 				else:
-					if self.score > 0.10:
+					# Check for left eye wink
+					if leftEyeRatio < self.blinkThreshold:
+						self.leftEyeWinkCounter += 1
+						if self.leftEyeWinkCounter >= self.blinkFrameThresh:
+							self.leftWink()
+					else:
+						self.leftEyeWinkCounter = 0
+
+					# Check for left eye wink
+					if rightEyeRatio < self.blinkThreshold:
+						self.rightEyeWinkCounter += 1
+						if self.rightEyeWinkCounter >= self.blinkFrameThresh:
+							self.rightWink()
+					else:
+						self.rightEyeWinkCounter = 0
+
+					# Check if previous blink score passes threshold
+					if self.blinkScore > 0.05:
 						self.blinks += 1
-						self.blinkFrameCounter += 1
+
+						# Check if blink was long blink
 						if self.blinkFrameCounter >= self.blinkFrameThresh:
-							self.takeAction()
-					self.score = 0
+							self.blink()
+
+					self.blinkFrameCounter = 0
+					self.blinkScore = 0
 
 				# Get bounding box coordinates
 				(x, y, w, h) = face_utils.rect_to_bb(face)
@@ -190,10 +221,19 @@ class EyeGaze:
 		# webcam is still in use if python dosent quit
 		quit()
 
-	def takeAction(self):
-		self.color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+	def blink(self):
+		# self.color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+		# print(self.color)
+		self.color = (0, 255, 0)
+		print("BLINK")
+
+	def leftWink(self):
+		self.color = (255, 0, 0)
 		print(self.color)
 
+	def rightWink(self):
+		self.color = (0, 0, 255)
+		print(self.color)
 
 if __name__ == '__main__':
 	obj = EyeGaze()

@@ -39,7 +39,7 @@ class Helper:
 			if y < ymin:
 				ymin = y
 
-		return frame[ymin-10:ymax+10, xmin-10:xmax+10]
+		return frame[ymin:ymax, xmin:xmax]
 
 	def gammaCorrection(self, image, gamma):
 		gammaInverse = 1.0 / gamma
@@ -68,7 +68,7 @@ class Helper:
 		# Normalise image after gamma correction
 		cv2.normalize(img, img, 0, 255, cv2.NORM_MINMAX)
 
-		cv2.imshow("normalised", img)
+		cv2.imshow("{} normalised".format(eye), img)
 
 		# Binarise image
 		_, thresh = cv2.threshold(img, 40, 255, cv2.THRESH_BINARY)
@@ -119,7 +119,7 @@ class Helper:
 			# print("radius ratio = {}. x = {}, y = {}. Area = {}, Length = {}".format(radiusRatio, cX, cY, contourArea, arcLength))
 
 			# reject contour if circularity is out of acceptable range
-			if circularity > 1.8 or circularity < 0.70:
+			if circularity > 1.5 or circularity < 0.70:
 				return meanAfterGamma, (0, 0)
 
 			cv2.circle(image, (cX, cY), 5, (255, 255, 255), -1)
