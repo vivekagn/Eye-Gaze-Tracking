@@ -1,309 +1,200 @@
 # Facial landmarks
 from scipy.spatial import distance as dist
 from imutils import face_utils
+from Helper import *
 import numpy as np
 import imutils
 import dlib
 import cv2
 import math
+import random
 import sys
 
-# Constants for controlling the Blink Frequency.
-blinkThreshold = 0.3
-blinkFrameThresh = 3
-blinkCounter = 0
-blinks = 0
-score = 0
+class EyeGaze:
+	def __init__(self):
+		# Constants for controlling the Blink Frequency.
+		self.blinkThreshold = 0.3
+		self.blinkFrameThresh = 3
+		self.blinkFrameCounter = 0
+		self.blinks = 0
+		self.score = 0
 
-def eyeRatio(eye):
-    # Possibly replace euclidean() with manual calculation
-    
-    # Calculate average height of eye
-    h1 = dist.euclidean(eye[1], eye[5])
-    h2 = dist.euclidean(eye[2], eye[4])
-    heightAverage = (h1 + h2) / 2.0
+		# initialize dlib's face detector (HOG-based) and then create
+		# the facial landmark predictor
+		self.helper = Helper()
+		self.detector = dlib.get_frontal_face_detector()
+		self.predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+		self.color = (0,225,0)
 
-    # Calculate width of eye
-    width = dist.euclidean(eye[0], eye[3])
+		# Initial gamma
+		self.gamma = 1.0
+		# Initial mean intensity of eye region
+		self.mean = 0
 
-    # Calculate the eye aspect ratio
-    ratio = heightAverage / width
+		self.screenWidth = 1400
+		self.controlArea = np.ones((100, self.screenWidth, 3), np.uint8) * 255
 
-    return ratio
+	def start(self, arg=""):
+		# Use sample video
+		if len(arg)!=0:
+			camera = cv2.VideoCapture(arg)
 
-def eyeRegion(eye):
-    xmax, ymax = eye[0]
-    xmin, ymin = eye[0]
-    for (x,y) in eye:
-        if x > xmax:
-            xmax = x
-        if x < xmin:
-            xmin = x
-        if y > ymax:
-            ymax = y
-        if y < ymin:
-            ymin = y
-    
-    return frame[ymin:ymax, xmin:xmax]
+		else:
+			camera = cv2.VideoCapture(0)
 
-def gammaCorrection(image, gamma):
-    gammaInverse = 1.0 / gamma
-    # Lookup table to 
-    lookupTable = np.array([((i / 255.0) ** gammaInverse) * 255
-    for i in np.arange(0, 256)]).astype("uint8")
- 
-    gammaCorrected = cv2.LUT(image, lookupTable)
-    
-    return gammaCorrected
+		while camera.isOpened():
+			ret, frame = camera.read()
 
-def get_iris_center(image, eye, gamma=1.0):
-    # Increased size to width of 100 for better results
-    image = imutils.resize(image, width=100)
-    # Convert to grayscale
-    img = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+			cv2.imshow("Control Area", self.controlArea)
 
-    # Gamma correction
-    img = gammaCorrection(img, gamma)
+			if ret == False:
+				break
 
-    # Return to caller to adjust gamma in future call
-    meanAfterGamma = cv2.mean(img)[0]
+			xL = yL = xR = yR = 0
 
-    img = cv2.GaussianBlur(img, (5,5), 0)
+			# Used for FPS calculation
+			startTime = cv2.getTickCount()
 
-    # Normalise image after gamma correction
-    cv2.normalize(img, img, 0, 255, cv2.NORM_MINMAX)
+			# Load frame from webcam, resize and convert to grayscale
+			frame = imutils.resize(frame, width=600)
+			gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
-    cv2.imshow("normalised", img)
+			# Detect faces in frame
+			faces = self.detector(gray, 1)
 
-    # Binarise image
-    _,thresh = cv2.threshold(img,40,255,cv2.THRESH_BINARY)
-    
-    # Closing
-    # kernel = np.ones((3,3),np.uint8)
-    # thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, kernel)
+			# loop over the face detections
+			for (i, face) in enumerate(faces):
+				# determine the facial landmarks for the face region, then
+				# convert the facial landmark (x, y)-coordinates to a NumPy
+				# array
+				shape = self.predictor(gray, face)
+				shape = face_utils.shape_to_np(shape)
 
-    # Opening
-    # kernel = np.ones((5,5),np.uint8)
-    # thresh = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel)
+				# grab the indexes of the facial landmarks for the left and
+				# right eye, respectively
+				(lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
+				(rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
 
-    # Invert binarisation
-    thresh[thresh == 0] = 127
-    thresh[thresh == 255] = 0
-    thresh[thresh == 127] = 255
-    # X and Y coordinates of centre of iris
-    cX = cY = 0
-    
-    cv2.imshow("{} Eye threshold".format(eye), thresh)
+				# Get coordinates of 6 eye features
+				leftEye = shape[lStart:lEnd]
+				rightEye = shape[rStart:rEnd]
+				# Calulate ratio of eyes
+				leftEyeRatio = self.helper.eyeRatio(leftEye)
+				rightEyeRatio = self.helper.eyeRatio(rightEye)
 
-    cnts = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    cnts = cnts[0] if imutils.is_cv2() else cnts[1]
-    
-    # Check if contour is found
-    if len(cnts) == 0:
-        return meanAfterGamma, (0, 0)
-    c = max(cnts, key=cv2.contourArea)
-    if cv2.contourArea(c) > 0:
-        # Get center of the contour
-        M = cv2.moments(c)
-        cX = int(M["m10"] / M["m00"])
-        cY = int(M["m01"] / M["m00"])
+				# Get left and right eye
+				lEye = self.helper.eyeRegion(leftEye, frame)
+				rEye = self.helper.eyeRegion(rightEye, frame)
 
-        arcLength = cv2.arcLength(c, True)
-        contourArea = cv2.contourArea(c)
-        Pi = 3.14159
-        # Calculate approximate radius based on arc length of contour
-        # L = 2  * Pi * r
-        radiusL = arcLength / (2 * Pi)
-        radiusLSquared = radiusL * radiusL
-        # Calculate approximate radius based on area of contour
-        # A = Pi * r^2
-        radiusASquared = contourArea / Pi
-        # Use the ratio of radii from arc length and area to determine circularity of contour
-        circularity = radiusLSquared / radiusASquared
+				# Get center of each eye
+				if leftEyeRatio > 0.25:
+					self.helper.get_iris_center(lEye, "Left")
+					# Adjust gamma to suit brightness
+					if self.mean > 80:
+						self.gamma -= 0.02
+					elif self.mean < 70:
+						self.gamma += 0.02
+					meanL, (xL, yL) = self.helper.get_iris_center(lEye, "Left", gamma=self.gamma)
+					self.mean += meanL
+					self.mean = self.mean / 2
 
-        # print("radius ratio = {}. x = {}, y = {}. Area = {}, Length = {}".format(radiusRatio, cX, cY, contourArea, arcLength))
+				if rightEyeRatio > 0.25:
+					# Adjust gamma to suit brightness
+					if self.mean > 80:
+						self.gamma -= 0.02
+					elif self.mean < 70:
+						self.gamma += 0.02
+					meanR, (xR, yR) = self.helper.get_iris_center(rEye, "Right", gamma=self.gamma)
+					self.mean += meanR
+					self.mean = self.mean / 2
 
-        # reject contour if circularity is out of acceptable range
-        if circularity > 1.8 or circularity < 0.70:
-            return meanAfterGamma, (0, 0)
-
-        cv2.circle(image, (cX, cY), 5, (255, 255, 255), -1)
-        
-        cv2.drawContours(image, [c], 0, (0, 255, 0), 1)
-    
-    cv2.imshow("{} Eye".format(eye), image)
-
-    cv2.waitKey(1)
-
-    # Return mean intensity after gammma correction,
-    # relative x, y coordinates of the centre of the iris
-    return meanAfterGamma, (cX / 100, cY / len(image[:]))
+				# print("{} {}".format(mean,gamma))
 
 
-# initialize dlib's face detector (HOG-based) and then create
-# the facial landmark predictor
-detector = dlib.get_frontal_face_detector()
-predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
+				if xL > 0 and xR > 0:
+					x = int((xL + xR) * 50)
+					print(
+						"Left x: {}, y: {} Right x: {}, y: {}".format(int(xL * 100), int(yL * 100), int(xR * 100),
+						                                              int(yR * 100)))
+				elif xL > 0:
+					x = int(xL * 100)
+				elif xR > 0:
+					x = int(xR * 100)
+				else:
+					x = 0
 
-# Use sample video
-if len(sys.argv[:]) == 2:
-    filename = sys.argv[1]
-    camera = cv2.VideoCapture(filename)
+				if x != 0:
+					# Clear control area
+					self.controlArea[:, :, :] = 255
+					# 35, 60 are locations in eye region corresponding to looking left and right on screen
+					# Will need to add in a calibration so these aren't hard coded in
+					if x < 40: x = 40
+					if x > 60: x = 60
+					# Map x to location in control area
+					xControl = self.screenWidth - int((x - 40) * (self.screenWidth / 20))
+					cv2.circle(self.controlArea, (xControl, 50), 20, self.color, -1)
 
-# Use Webcam
-else:
-    camera = cv2.VideoCapture(0)
+				# Calculate average eye aspect ratio
+				averageEyeRatio = (leftEyeRatio + rightEyeRatio) / 2.0
 
-# Initial gamma
-gamma = 1.0
-# Initial mean intensity of eye region
-mean = 0
+				leftCorner = leftEye[0]
+				rightCorner = leftEye[3]
 
-screenWidth = 1400
-controlArea = np.ones((100, screenWidth, 3) , np.uint8) * 255
+				angle = math.atan((leftCorner[1] - rightCorner[1]) / (leftCorner[0] - rightCorner[0]))
 
-while camera.isOpened():
-    ret, frame = camera.read()
+				# Calculate blink score based on eye aspect ratio
+				if averageEyeRatio < self.blinkThreshold:
+					self.score += (0.35 - averageEyeRatio)
+				else:
+					if self.score > 0.10:
+						self.blinks += 1
+						self.blinkFrameCounter += 1
+						if self.blinkFrameCounter >= self.blinkFrameThresh:
+							self.takeAction()
+					self.score = 0
 
-    cv2.imshow("Control Area", controlArea)
+				# Get bounding box coordinates
+				(x, y, w, h) = face_utils.rect_to_bb(face)
+				cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-    if ret == False:
-        break
+				cv2.drawContours(frame, [cv2.convexHull(leftEye)], -1, (255, 0, 0), 1)
+				cv2.drawContours(frame, [cv2.convexHull(rightEye)], -1, (255, 0, 0), 1)
 
-    xL = yL = xR = yR = 0
+				# show the face number
+				cv2.putText(frame, "Face #{}".format(i + 1), (x - 10, y - 10),
+				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-    # Used for FPS calculation
-    startTime = cv2.getTickCount()
+				cv2.putText(frame, "Blinks: {}".format(self.blinks), (10, 30),
+				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-    # Load frame from webcam, resize and convert to grayscale
-    frame = imutils.resize(frame, width=600)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+				cv2.putText(frame, "Eye Ratio: {}".format(averageEyeRatio), (300, 30),
+				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-    # Detect faces in frame
-    faces = detector(gray, 1)
+				# loop over the (x, y)-coordinates for the facial landmarks
+				# and draw them on the image
+				for (x, y) in shape:
+					cv2.circle(frame, (x, y), 1, (0, 0, 255), -1)
 
-    # loop over the face detections
-    for (i, face) in enumerate(faces):
-        # determine the facial landmarks for the face region, then
-        # convert the facial landmark (x, y)-coordinates to a NumPy
-        # array
-        shape = predictor(gray, face)
-        shape = face_utils.shape_to_np(shape)
+			# Calculate frames per second (fps)
+			fps = int(cv2.getTickFrequency() / (cv2.getTickCount() - startTime))
 
-        # grab the indexes of the facial landmarks for the left and
-        # right eye, respectively
-        (lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
-        (rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
+			cv2.putText(frame, "FPS: {}".format(fps), (10, 265),
+			            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-        # Get coordinates of 6 eye features
-        leftEye = shape[lStart:lEnd]
-        rightEye = shape[rStart:rEnd]
-        # Calulate ratio of eyes
-        leftEyeRatio = eyeRatio(leftEye)
-        rightEyeRatio = eyeRatio(rightEye)
-        
-        # Get left and right eye
-        lEye = eyeRegion(leftEye)
-        rEye = eyeRegion(rightEye)
+			cv2.imshow("WebCam", frame)
+			if cv2.waitKey(1) & 0xFF == 27:
+				break
 
-        # Get center of each eye
-        if leftEyeRatio > 0.25:
-            get_iris_center(lEye, "Left")
-            # Adjust gamma to suit brightness
-            if mean > 80:
-                gamma -= 0.02
-            elif mean < 70:
-                gamma += 0.02
-            meanL, (xL, yL) = get_iris_center(lEye, "Left", gamma=gamma)
-            mean += meanL
-            mean = mean / 2
+		camera.release()
+		cv2.destroyAllWindows()
+		# webcam is still in use if python dosent quit
+		quit()
 
-        if rightEyeRatio > 0.25:
-            # Adjust gamma to suit brightness
-            if mean > 80:
-                gamma -= 0.02
-            elif mean < 70:
-                gamma += 0.02
-            meanR, (xR, yR) = get_iris_center(rEye, "Right", gamma=gamma)
-            mean += meanR
-            mean = mean / 2
-
-        # print("{} {}".format(mean,gamma)) 
-        
-
-        if xL > 0 and xR > 0:
-            x = int((xL + xR) * 50)
-            print("Left x: {}, y: {} Right x: {}, y: {}".format(int(xL * 100), int(yL * 100), int(xR * 100), int(yR * 100)))
-        elif xL > 0:
-            x = int(xL * 100)
-        elif xR > 0:
-            x = int(xR * 100)
-        else:
-            x = 0
-
-        if x != 0:
-            # Clear control area
-            controlArea[:,:,:] = 255
-            # 35, 60 are locations in eye region corresponding to looking left and right on screen
-            # Will need to add in a calibration so these aren't hard coded in
-            if x < 40: x = 40
-            if x > 60: x = 60
-            # Map x to location in control area
-            xControl = screenWidth - int((x - 40) * (screenWidth / 20))
-            cv2.circle(controlArea, (xControl, 50), 20, (0,0,255), -1)
-        
-        # Calculate average eye aspect ratio
-        averageEyeRatio = (leftEyeRatio + rightEyeRatio)/2.0
+	def takeAction(self):
+		self.color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+		print(self.color)
 
 
-        leftCorner = leftEye[0]
-        rightCorner = leftEye[3]
-
-        angle = math.atan((leftCorner[1]-rightCorner[1]) / (leftCorner[0]-rightCorner[0]))
-    
-        # Calculate blink score based on eye aspect ratio
-        if averageEyeRatio < 0.32:
-            score += (0.35 - averageEyeRatio)
-        else:
-            if score > 0.10:
-                blinks += 1
-            score = 0
-
-        # Get bounding box coordinates
-        (x, y, w, h) = face_utils.rect_to_bb(face)
-        cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
-
-        cv2.drawContours(frame, [cv2.convexHull(leftEye)], -1, (255, 0, 0), 1)
-        cv2.drawContours(frame, [cv2.convexHull(rightEye)], -1, (255, 0, 0), 1)
-
-        # show the face number
-        cv2.putText(frame, "Face #{}".format(i + 1), (x - 10, y - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-        cv2.putText(frame, "Blinks: {}".format(blinks), (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-        cv2.putText(frame, "Eye Ratio: {}".format(averageEyeRatio), (300, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-        # loop over the (x, y)-coordinates for the facial landmarks
-        # and draw them on the image
-        for (x, y) in shape:
-            cv2.circle(frame, (x, y), 1, (0, 0, 255), -1)
-
-    # Calculate frames per second (fps)
-    fps = int(cv2.getTickFrequency() / (cv2.getTickCount() - startTime))
-    
-    cv2.putText(frame, "FPS: {}".format(fps), (10, 265),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
-
-
-    cv2.imshow("WebCam", frame)
-    if cv2.waitKey(1) & 0xFF == 27:
-        break
-
-camera.release()
-cv2.destroyAllWindows()
-
-# webcam is still in use if python dosent quit
-quit()
+if __name__ == '__main__':
+	obj = EyeGaze()
+	obj.start()
