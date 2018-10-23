@@ -70,7 +70,7 @@ class Helper:
 		cv2.imshow("{} normalised".format(eye), img)
 
 		# Binarise image
-		_, thresh = cv2.threshold(img, 40, 255, cv2.THRESH_BINARY)
+		_, thresh = cv2.threshold(img, 20, 255, cv2.THRESH_BINARY)
 
 		# Closing
 		# kernel = np.ones((3,3),np.uint8)
