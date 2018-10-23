@@ -13,9 +13,9 @@ import sys
 class EyeGaze:
 	def __init__(self):
 		# Constants for controlling the Blink Frequency.
-		self.blinkThreshold = 0.3
+		self.blinkThreshold = 0.30
 		# Minimum number of frames for intentional blink or wink to be registered
-		self.blinkFrameThresh = 3
+		self.blinkFrameThresh = 4
 		self.blinkFrameCounter = 0
 		self.leftEyeWinkCounter = 0
 		self.rightEyeWinkCounter = 0
@@ -85,10 +85,21 @@ class EyeGaze:
 				(lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
 				(rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
 
+				(lEyebrowStart, lEyebrowEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eyebrow"]
+				(rEyebrowStart, rEyebrowEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eyebrow"]
+
+				# Get coordinates of eyebrows
+				leftEyebrow = FaceLandmarks[lEyebrowStart:lEyebrowEnd]
+				rightEyebrow = FaceLandmarks[rEyebrowStart:rEyebrowEnd]
+
 				# Get coordinates of 6 eye features
 				leftEye = FaceLandmarks[lStart:lEnd]
 				rightEye = FaceLandmarks[rStart:rEnd]
-				# Calulate ratio of eyes
+
+				eyebrowToEyeDistanceRatio = dist.euclidean(leftEye[4], leftEyebrow[2]) / dist.euclidean(rightEye[5], rightEyebrow[2])
+				# print("Dist = {}".format(eyebrowRatio))
+
+				# Calulate aspect ratio of eyes
 				leftEyeRatio = self.helper.eyeRatio(leftEye)
 				rightEyeRatio = self.helper.eyeRatio(rightEye)
 
@@ -119,20 +130,26 @@ class EyeGaze:
 					self.meanRight = self.meanRight / 2
 
 				# print("{} {}".format(mean,gamma))
-				print("xL = {}, xR = {}".format(int(xL), int(xR)))
+				# print("xL = {}, xR = {}".format(int(xL), int(xR)))
 
+				# Pupil located for both eyes
 				if xL > 0 and xR > 0:
 					x = int((xL + xR) * 50)
-					print(
-						"Left x: {}, y: {} Right x: {}, y: {}".format(int(xL * 100), int(yL * 100), int(xR * 100),
-						                                              int(yR * 100)))
+					# print("Left x: {}, y: {} Right x: {}, y: {}".format(int(xL * 100), int(yL * 100), int(xR * 100), int(yR * 100)))
+				# Pupil located only for left eye
 				elif xL > 0:
 					x = int(xL * 100)
+				
+				# Pupil located only for right eye
 				elif xR > 0:
 					x = int(xR * 100)
+				
+				# Pupil cannot be located for either eye
 				else:
 					x = 0
 
+				# Pupil located for at least one eye
+				# Update control area
 				if x != 0:
 					# Clear control area
 					self.controlArea[:, :, :] = 255
@@ -155,26 +172,11 @@ class EyeGaze:
 				# Calculate blinkScore based on eye aspect ratio
 				if averageEyeRatio < self.blinkThreshold:
 					self.blinkScore += (self.blinkThreshold - averageEyeRatio)
+					# print("{}".format(averageEyeRatio))
 					self.blinkFrameCounter += 1
-				
+
 				# Not blinking, check for winks
 				else:
-					# Check for left eye wink
-					if leftEyeRatio < self.blinkThreshold:
-						self.leftEyeWinkCounter += 1
-						if self.leftEyeWinkCounter >= self.blinkFrameThresh:
-							self.leftWink()
-					else:
-						self.leftEyeWinkCounter = 0
-
-					# Check for left eye wink
-					if rightEyeRatio < self.blinkThreshold:
-						self.rightEyeWinkCounter += 1
-						if self.rightEyeWinkCounter >= self.blinkFrameThresh:
-							self.rightWink()
-					else:
-						self.rightEyeWinkCounter = 0
-
 					# Check if previous blink score passes threshold
 					if self.blinkScore > 0.05:
 						self.blinks += 1
@@ -185,6 +187,24 @@ class EyeGaze:
 
 					self.blinkFrameCounter = 0
 					self.blinkScore = 0
+
+				# Check for left eye wink
+				# if leftEyeRatio < self.blinkThreshold and (rightEyeRatio - leftEyeRatio) > 0.025:
+				if eyebrowToEyeDistanceRatio < 0.95:
+					self.leftEyeWinkCounter += 1
+					if self.leftEyeWinkCounter >= self.blinkFrameThresh:
+						self.leftWink()
+				else:
+					self.leftEyeWinkCounter = 0
+
+				# Check for right eye wink
+				# if rightEyeRatio < self.blinkThreshold and (leftEyeRatio - rightEyeRatio) > 0.025:
+				if eyebrowToEyeDistanceRatio > 1.05:
+					self.rightEyeWinkCounter += 1
+					if self.rightEyeWinkCounter >= self.blinkFrameThresh:
+						self.rightWink()
+				else:
+					self.rightEyeWinkCounter = 0
 
 				# Get bounding box coordinates
 				(x, y, w, h) = face_utils.rect_to_bb(face)
@@ -199,7 +219,7 @@ class EyeGaze:
 				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 				# Display average eye aspect ratio
-				cv2.putText(frame, "Eye Ratio: {}".format(averageEyeRatio), (300, 30),
+				cv2.putText(frame, "Left Eye Ratio: {:.2}. Right Eye Ratio: {:.2}".format(leftEyeRatio, rightEyeRatio), (250, 30),
 				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 				# Draw facial landmarks
