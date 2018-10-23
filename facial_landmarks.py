@@ -14,19 +14,21 @@ class EyeGaze:
 	def __init__(self):
 		# Constants for controlling the Blink Frequency.
 		self.blinkThreshold = 0.3
+		# Minimum number of frames for intentional blink or wink to be registered
 		self.blinkFrameThresh = 3
 		self.blinkFrameCounter = 0
 		self.leftEyeWinkCounter = 0
 		self.rightEyeWinkCounter = 0
+		# Total number of blinks
 		self.blinks = 0
 		self.blinkScore = 0
 
-		# initialize dlib's face detector (HOG-based) and then create
-		# the facial landmark predictor
 		self.helper = Helper()
+		# Face detector
 		self.detector = dlib.get_frontal_face_detector()
+		# Facial landmark predictor is used to find facial features such as eyes and nose
 		self.predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
-		self.color = (0,225,0)
+		self.colour = (0,225,0)
 
 		# Initial gamma
 		self.gammaLeft = 1.0
@@ -44,48 +46,48 @@ class EyeGaze:
 
 	def start(self, arg=""):
 		# Use sample video
-		if len(arg)!=0:
+		if len(arg) != 0:
 			camera = cv2.VideoCapture(arg)
 
 		else:
 			camera = cv2.VideoCapture(0)
 
 		while camera.isOpened():
+			# Get frame from webcam
 			ret, frame = camera.read()
-
-			cv2.imshow("Control Area", self.controlArea)
 
 			if ret == False:
 				break
 
+			# Display control window
+			cv2.imshow("Control Area", self.controlArea)
+
+			# Coordiates of pupil for left and right eyes
 			xL = yL = xR = yR = 0
 
 			# Used for FPS calculation
 			startTime = cv2.getTickCount()
 
-			# Load frame from webcam, resize and convert to grayscale
+			# Resize and convert to grayscale
 			frame = imutils.resize(frame, width=600)
-			gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+			frameGray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
 			# Detect faces in frame
-			faces = self.detector(gray, 1)
+			faces = self.detector(frameGray, 1)
 
 			# loop over the face detections
 			for (i, face) in enumerate(faces):
-				# determine the facial landmarks for the face region, then
-				# convert the facial landmark (x, y)-coordinates to a NumPy
-				# array
-				shape = self.predictor(gray, face)
-				shape = face_utils.shape_to_np(shape)
+				# Obtain facial landmarks
+				FaceLandmarks = self.predictor(frameGray, face)
+				FaceLandmarks = face_utils.shape_to_np(FaceLandmarks)
 
-				# grab the indexes of the facial landmarks for the left and
-				# right eye, respectively
+				# Get first and last index of coordinates corresponding to each eye
 				(lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
 				(rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
 
 				# Get coordinates of 6 eye features
-				leftEye = shape[lStart:lEnd]
-				rightEye = shape[rStart:rEnd]
+				leftEye = FaceLandmarks[lStart:lEnd]
+				rightEye = FaceLandmarks[rStart:rEnd]
 				# Calulate ratio of eyes
 				leftEyeRatio = self.helper.eyeRatio(leftEye)
 				rightEyeRatio = self.helper.eyeRatio(rightEye)
@@ -134,13 +136,13 @@ class EyeGaze:
 				if x != 0:
 					# Clear control area
 					self.controlArea[:, :, :] = 255
-					# 35, 60 are locations in eye region corresponding to looking left and right on screen
+					# 40, 60 are locations in eye region corresponding to looking left and right on screen
 					# Will need to add in a calibration so these aren't hard coded in
 					if x < 40: x = 40
 					if x > 60: x = 60
 					# Map x to location in control area
 					xControl = self.screenWidth - int((x - 40) * (self.screenWidth / 20))
-					cv2.circle(self.controlArea, (xControl, 50), 20, self.color, -1)
+					cv2.circle(self.controlArea, (xControl, 50), 20, self.colour, -1)
 
 				# Calculate average eye aspect ratio
 				averageEyeRatio = (leftEyeRatio + rightEyeRatio) / 2.0
@@ -191,19 +193,17 @@ class EyeGaze:
 				cv2.drawContours(frame, [cv2.convexHull(leftEye)], -1, (255, 0, 0), 1)
 				cv2.drawContours(frame, [cv2.convexHull(rightEye)], -1, (255, 0, 0), 1)
 
-				# show the face number
-				cv2.putText(frame, "Face #{}".format(i + 1), (x - 10, y - 10),
-				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
+				# Display number of blinks
 				cv2.putText(frame, "Blinks: {}".format(self.blinks), (10, 30),
 				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
+				# Display average eye aspect ratio
 				cv2.putText(frame, "Eye Ratio: {}".format(averageEyeRatio), (300, 30),
 				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
-				# loop over the (x, y)-coordinates for the facial landmarks
-				# and draw them on the image
-				for (x, y) in shape:
+				# Draw facial landmarks
+				for (x, y) in FaceLandmarks:
 					cv2.circle(frame, (x, y), 1, (0, 0, 255), -1)
 
 			# Calculate frames per second (fps)
@@ -221,20 +221,28 @@ class EyeGaze:
 		# webcam is still in use if python dosent quit
 		quit()
 
+	# Function for when intential blink occurs
 	def blink(self):
-		# self.color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-		# print(self.color)
-		self.color = (0, 255, 0)
+		# self.colour = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+		self.colour = (0, 255, 0)
 		print("BLINK")
 
+	# Function for wink of left eye
 	def leftWink(self):
-		self.color = (255, 0, 0)
-		print(self.color)
+		# Change colour to red
+		self.colour = (255, 0, 0)
+		print(self.colour)
 
+	# Function for wink of right eye
 	def rightWink(self):
-		self.color = (0, 0, 255)
-		print(self.color)
+		# Change colour
+		self.colour = (0, 0, 255)
+		print(self.colour)
 
 if __name__ == '__main__':
 	obj = EyeGaze()
-	obj.start()
+	if len(sys.argv[:]) == 2:
+		arg = sys.argv[1]
+	else:
+		arg = ""
+	obj.start(arg)

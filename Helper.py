@@ -42,7 +42,7 @@ class Helper:
 		return frame[ymin:ymax, xmin:xmax]
 
 	def gammaCorrection(self, image, gamma):
-		# Lookup table to
+		# Lookup table to map pixel values to new intensity range
 		lookupTable = np.array([((i / 255.0) ** gamma) * 255
 		                        for i in np.arange(0, 256)]).astype("uint8")
 
