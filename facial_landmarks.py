@@ -58,6 +58,9 @@ class EyeGaze:
 		self.screenWidth = 1400
 		self.controlArea = np.ones((100, self.screenWidth, 3), np.uint8) * 255
 
+		# Log ear data for fatigue monitoring
+		self.earDataFile = open("earData.txt", "w+")
+
 	"""
 	Driver function for eye gaze detection.
 	"""
@@ -278,6 +281,7 @@ class EyeGaze:
 				break
 
 		camera.release()
+		self.earDataFile.close()
 		cv2.destroyAllWindows()
 		# webcam is still in use if python doesn't quit
 		quit()
@@ -314,8 +318,9 @@ class EyeGaze:
 		print(self.fatigueCounter)
 		self.fatigueCounter += 1
 		self.AvgEAROvrTime = sum / self.fatigueCounter
-		print(self.AvgEAROvrTime)
 		if self.fatigueCounter > 100:
+			print(self.AvgEAROvrTime)
+			self.earDataFile.write("{} ".format(self.AvgEAROvrTime))
 			self.fatigueCounter = 0
 
 	"""
