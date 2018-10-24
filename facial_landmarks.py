@@ -148,6 +148,7 @@ class EyeGaze:
 				else:
 					x = 0
 
+
 				# Pupil located for at least one eye
 				# Update control area
 				if x != 0:
