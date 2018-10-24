@@ -32,6 +32,7 @@ class EyeGaze:
 		# fatigue Detection
 		self.fatigueThresh = 0.24
 		self.fatigueCounter = 0
+		self.fatigueDetection = 0
 		self.AvgEAROvrTime = 0
 
 		self.helper = Helper()
@@ -187,9 +188,14 @@ class EyeGaze:
 				self.updateAvgEAROvrTime(averageEyeRatio)
 
 				# check if fatigue is detected
-				if self.AvgEAROvrTime < self.fatigueThresh and self.fatigueCounter > 50:
-					self.raiseAlarm()
+				if self.AvgEAROvrTime < self.fatigueThresh:
+					if self.fatigueDetection > 10:
+						self.raiseAlarm()
+						self.fatigueDetection = 0
+					self.fatigueDetection += 1
 					self.fatigueCounter = 0
+				else:
+					self.fatigueDetection = 0
 
 				leftCorner = leftEye[0]
 				rightCorner = leftEye[3]
