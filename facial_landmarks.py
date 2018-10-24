@@ -58,6 +58,8 @@ class EyeGaze:
 		self.screenWidth = 1400
 		self.controlArea = np.ones((100, self.screenWidth, 3), np.uint8) * 255
 
+		self.colour = (0,255,0)
+
 		# Log ear data for fatigue monitoring
 		self.earDataFile = open("earData.txt", "w+")
 
@@ -78,6 +80,22 @@ class EyeGaze:
 			if ret == False:
 				break
 
+			# Draw area numbers
+			cv2.putText(self.controlArea, "1", (140, 50),
+				            cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 50, 50), 2)
+			cv2.putText(self.controlArea, "2", (420, 50),
+				            cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 50, 50), 2)
+			cv2.putText(self.controlArea, "3", (700, 50),
+				            cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 50, 50), 2)
+			cv2.putText(self.controlArea, "4", (980, 50),
+				            cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 50, 50), 2)
+			cv2.putText(self.controlArea, "5", (1260, 50),
+				            cv2.FONT_HERSHEY_SIMPLEX, 1, (50, 50, 50), 2)
+			# Draw lines
+			cv2.line(self.controlArea, (280, 0), (280, 100), (0,0,0), 2)
+			cv2.line(self.controlArea, (560, 0), (560, 100), (0,0,0), 2)
+			cv2.line(self.controlArea, (840, 0), (840, 100), (0,0,0), 2)
+			cv2.line(self.controlArea, (1120, 0), (1120, 100), (0,0,0), 2)
 			# Display control window
 			cv2.imshow("Control Area", self.controlArea)
 
@@ -224,21 +242,24 @@ class EyeGaze:
 					self.blinkFrameCounter = 0
 					self.blinkScore = 0
 
+				print(eyebrowToEyeDistanceRatio)
 				# Check for left eye wink
 				# if leftEyeRatio < self.blinkThreshold and (rightEyeRatio - leftEyeRatio) > 0.025:
-				if eyebrowToEyeDistanceRatio < 0.95:
+				if eyebrowToEyeDistanceRatio < 0.967:
 					self.leftEyeWinkCounter += 1
 					if self.leftEyeWinkCounter >= self.blinkFrameThresh:
 						self.leftWink()
+						self.leftEyeWinkCounter = 0
 				else:
 					self.leftEyeWinkCounter = 0
 
 				# Check for right eye wink
 				# if rightEyeRatio < self.blinkThreshold and (leftEyeRatio - rightEyeRatio) > 0.025:
-				if eyebrowToEyeDistanceRatio > 1.05:
+				if eyebrowToEyeDistanceRatio > 1.07:
 					self.rightEyeWinkCounter += 1
 					if self.rightEyeWinkCounter >= self.blinkFrameThresh:
 						self.rightWink()
+						self.rightEyeWinkCounter = 0
 				else:
 					self.rightEyeWinkCounter = 0
 
@@ -291,7 +312,7 @@ class EyeGaze:
 	"""
 	def blink(self):
 		# self.colour = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
-		self.colour = (0, 255, 0)
+		# self.colour = (0, 255, 0)
 		print("BLINK")
 
 	"""
@@ -300,7 +321,6 @@ class EyeGaze:
 	def leftWink(self):
 		# Change colour to red
 		self.colour = (255, 0, 0)
-		print(self.colour)
 
 	"""
 	Function to achieve the functionality of blinks
@@ -308,14 +328,13 @@ class EyeGaze:
 	def rightWink(self):
 		# Change colour
 		self.colour = (0, 0, 255)
-		print(self.colour)
 
 	"""
 	Function to update the Average EAR over time
 	"""
 	def updateAvgEAROvrTime(self, EAR):
 		sum = self.AvgEAROvrTime * self.fatigueCounter + EAR
-		print(self.fatigueCounter)
+		# print(self.fatigueCounter)
 		self.fatigueCounter += 1
 		self.AvgEAROvrTime = sum / self.fatigueCounter
 		if self.fatigueCounter > 100:
