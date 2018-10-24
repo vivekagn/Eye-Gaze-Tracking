@@ -10,29 +10,43 @@ import math
 import random
 import sys
 
+
 class EyeGaze:
+	"""
+	Initialize the class with all the required Variables.
+	"""
 	def __init__(self):
 		# Constants for controlling the Blink Frequency.
 		self.blinkThreshold = 0.30
+
 		# Minimum number of frames for intentional blink or wink to be registered
 		self.blinkFrameThresh = 4
 		self.blinkFrameCounter = 0
 		self.leftEyeWinkCounter = 0
 		self.rightEyeWinkCounter = 0
+
 		# Total number of blinks
 		self.blinks = 0
 		self.blinkScore = 0
 
+		# fatigue Detection
+		self.fatigueThresh = 0.24
+		self.fatigueCounter = 0
+		self.fatigueDetection = 0
+		self.AvgEAROvrTime = 0
+
 		self.helper = Helper()
+
 		# Face detector
 		self.detector = dlib.get_frontal_face_detector()
+
 		# Facial landmark predictor is used to find facial features such as eyes and nose
 		self.predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
-		self.colour = (0,225,0)
 
 		# Initial gamma
 		self.gammaLeft = 1.0
 		self.gammaRight = 1.0
+
 		# Initial mean intensity of eye region
 		self.meanLeft = 0
 		self.meanRight = 0
@@ -44,11 +58,13 @@ class EyeGaze:
 		self.screenWidth = 1400
 		self.controlArea = np.ones((100, self.screenWidth, 3), np.uint8) * 255
 
+	"""
+	Driver function for eye gaze detection.
+	"""
 	def start(self, arg=""):
 		# Use sample video
 		if len(arg) != 0:
 			camera = cv2.VideoCapture(arg)
-
 		else:
 			camera = cv2.VideoCapture(0)
 
@@ -135,19 +151,18 @@ class EyeGaze:
 				# Pupil located for both eyes
 				if xL > 0 and xR > 0:
 					x = int((xL + xR) * 50)
-					# print("Left x: {}, y: {} Right x: {}, y: {}".format(int(xL * 100), int(yL * 100), int(xR * 100), int(yR * 100)))
+				# print("Left x: {}, y: {} Right x: {}, y: {}".format(int(xL * 100), int(yL * 100), int(xR * 100), int(yR * 100)))
 				# Pupil located only for left eye
 				elif xL > 0:
 					x = int(xL * 100)
-				
+
 				# Pupil located only for right eye
 				elif xR > 0:
 					x = int(xR * 100)
-				
+
 				# Pupil cannot be located for either eye
 				else:
 					x = 0
-
 
 				# Pupil located for at least one eye
 				# Update control area
@@ -156,14 +171,31 @@ class EyeGaze:
 					self.controlArea[:, :, :] = 255
 					# 40, 60 are locations in eye region corresponding to looking left and right on screen
 					# Will need to add in a calibration so these aren't hard coded in
-					if x < 40: x = 40
-					if x > 60: x = 60
+
+					if x < 40:
+						x = 40
+					if x > 60:
+						x = 60
+
 					# Map x to location in control area
 					xControl = self.screenWidth - int((x - 40) * (self.screenWidth / 20))
 					cv2.circle(self.controlArea, (xControl, 50), 20, self.colour, -1)
 
 				# Calculate average eye aspect ratio
 				averageEyeRatio = (leftEyeRatio + rightEyeRatio) / 2.0
+
+				# update average eye aspect ratio over time
+				self.updateAvgEAROvrTime(averageEyeRatio)
+
+				# check if fatigue is detected
+				if self.AvgEAROvrTime < self.fatigueThresh:
+					if self.fatigueDetection > 10:
+						self.raiseAlarm()
+						self.fatigueDetection = 0
+					self.fatigueDetection += 1
+					self.fatigueCounter = 0
+				else:
+					self.fatigueDetection = 0
 
 				leftCorner = leftEye[0]
 				rightCorner = leftEye[3]
@@ -214,13 +246,21 @@ class EyeGaze:
 				cv2.drawContours(frame, [cv2.convexHull(leftEye)], -1, (255, 0, 0), 1)
 				cv2.drawContours(frame, [cv2.convexHull(rightEye)], -1, (255, 0, 0), 1)
 
-
 				# Display number of blinks
 				cv2.putText(frame, "Blinks: {}".format(self.blinks), (10, 30),
 				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
+				cv2.putText(frame, "Leye Winks: {}".format(self.leftEyeWinkCounter), (10, 60),
+				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+				cv2.putText(frame, "Reye winks: {}".format(self.rightEyeWinkCounter), (10, 90),
+				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
 				# Display average eye aspect ratio
-				cv2.putText(frame, "Left Eye Ratio: {:.2}. Right Eye Ratio: {:.2}".format(leftEyeRatio, rightEyeRatio), (250, 30),
+				cv2.putText(frame, "Left Eye Ratio: {:.2}.".format(leftEyeRatio), (400, 30),
+				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+
+				cv2.putText(frame, "Left Eye Ratio: {:.2}.".format(rightEyeRatio), (400, 60),
 				            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
 
 				# Draw facial landmarks
@@ -239,26 +279,51 @@ class EyeGaze:
 
 		camera.release()
 		cv2.destroyAllWindows()
-		# webcam is still in use if python dosent quit
+		# webcam is still in use if python doesn't quit
 		quit()
 
-	# Function for when intential blink occurs
+	"""
+	Function to achieve the functionality of blinks
+	"""
 	def blink(self):
 		# self.colour = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 		self.colour = (0, 255, 0)
 		print("BLINK")
 
-	# Function for wink of left eye
+	"""
+	Function to achieve the functionality of blinks
+	"""
 	def leftWink(self):
 		# Change colour to red
 		self.colour = (255, 0, 0)
 		print(self.colour)
 
-	# Function for wink of right eye
+	"""
+	Function to achieve the functionality of blinks
+	"""
 	def rightWink(self):
 		# Change colour
 		self.colour = (0, 0, 255)
 		print(self.colour)
+
+	"""
+	Function to update the Average EAR over time
+	"""
+	def updateAvgEAROvrTime(self, EAR):
+		sum = self.AvgEAROvrTime * self.fatigueCounter + EAR
+		print(self.fatigueCounter)
+		self.fatigueCounter += 1
+		self.AvgEAROvrTime = sum / self.fatigueCounter
+		print(self.AvgEAROvrTime)
+		if self.fatigueCounter > 100:
+			self.fatigueCounter = 0
+
+	"""
+	Function to raise an alert/alarm 
+	that the user is experiencing fatigue.
+	"""
+	def raiseAlarm(self):
+		print("Fatigue Detected")
 
 if __name__ == '__main__':
 	obj = EyeGaze()
