@@ -59,8 +59,8 @@ class EyeGaze:
 		self.meanRight = 0
 
 		# Upper and lower bounds of mean
-		self.meanUpper = 75
-		self.meanLower = 65
+		self.meanUpper = 80
+		self.meanLower = 75
 
 		self.screenWidth = 1400
 		self.controlArea = np.ones((100, self.screenWidth, 3), np.uint8) * 255
@@ -83,6 +83,8 @@ class EyeGaze:
 			camera = cv2.VideoCapture(arg)
 		else:
 			camera = cv2.VideoCapture(0)
+
+		accuracy = 0
 
 		while camera.isOpened():
 			# Get frame from webcam
@@ -217,6 +219,11 @@ class EyeGaze:
 					# Find mean of 5 most recent gaze locations
 					meanGaze = int(np.mean(self.gazeLocation))
 
+					diff = abs(700 - meanGaze)
+
+					accuracy += diff
+					accuracy = accuracy / 2
+
 					cv2.circle(self.controlArea, (meanGaze, 50), 20, self.colour, -1)
 
 				# Calculate average eye aspect ratio
@@ -317,6 +324,8 @@ class EyeGaze:
 			cv2.imshow("WebCam", frame)
 			if cv2.waitKey(1) & 0xFF == 27:
 				break
+
+		# print("acc = {}".format(accuracy))
 
 		camera.release()
 		self.earDataFile.close()
