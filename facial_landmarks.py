@@ -1,14 +1,17 @@
 # Facial landmarks
-from scipy.spatial import distance as dist
-from imutils import face_utils
+
 from Helper import *
+import sys
+import cv2
 import numpy as np
 import imutils
 import dlib
-import cv2
+from scipy.spatial import distance as dist
+from imutils import face_utils
 import math
 import random
-import sys
+from collections import deque
+
 
 
 class EyeGaze:
@@ -35,6 +38,10 @@ class EyeGaze:
 		self.fatigueDetection = 0
 		self.AvgEAROvrTime = 0
 
+		# Position of centre of eye corresponding to looking at left and right sides of screen
+		self.leftValue = 60
+		self.rightValue = 43
+
 		self.helper = Helper()
 
 		# Face detector
@@ -58,6 +65,10 @@ class EyeGaze:
 		self.screenWidth = 1400
 		self.controlArea = np.ones((100, self.screenWidth, 3), np.uint8) * 255
 
+		# Stores the latest 5 gaze locations
+		self.gazeLocation = deque(maxlen=5)
+
+		# Circle colour
 		self.colour = (0,255,0)
 
 		# Log ear data for fatigue monitoring
@@ -167,7 +178,7 @@ class EyeGaze:
 					self.meanRight = self.meanRight / 2
 
 				# print("{} {}".format(mean,gamma))
-				# print("xL = {}, xR = {}".format(int(xL), int(xR)))
+				# print("xL = {}, xR = {}".format(int(xL * 100), int(xR * 100)))
 
 				# Pupil located for both eyes
 				if xL > 0 and xR > 0:
@@ -193,14 +204,19 @@ class EyeGaze:
 					# 40, 60 are locations in eye region corresponding to looking left and right on screen
 					# Will need to add in a calibration so these aren't hard coded in
 
-					if x < 40:
-						x = 40
-					if x > 60:
-						x = 60
+					if x < self.rightValue:
+						x = self.rightValue
+					if x > self.leftValue:
+						x = self.leftValue
 
 					# Map x to location in control area
-					xControl = self.screenWidth - int((x - 40) * (self.screenWidth / 20))
-					cv2.circle(self.controlArea, (xControl, 50), 20, self.colour, -1)
+					xControl = self.screenWidth - int((x - self.rightValue) * (self.screenWidth / (self.leftValue - self.rightValue)))
+					# Add gaze location to deque
+					self.gazeLocation.append(xControl)
+					# Find mean of 5 most recent gaze locations
+					meanGaze = int(np.mean(self.gazeLocation))
+
+					cv2.circle(self.controlArea, (meanGaze, 50), 20, self.colour, -1)
 
 				# Calculate average eye aspect ratio
 				averageEyeRatio = (leftEyeRatio + rightEyeRatio) / 2.0
@@ -242,7 +258,7 @@ class EyeGaze:
 					self.blinkFrameCounter = 0
 					self.blinkScore = 0
 
-				print(eyebrowToEyeDistanceRatio)
+				# print(eyebrowToEyeDistanceRatio)
 				# Check for left eye wink
 				# if leftEyeRatio < self.blinkThreshold and (rightEyeRatio - leftEyeRatio) > 0.025:
 				if eyebrowToEyeDistanceRatio < 0.967:
@@ -313,7 +329,7 @@ class EyeGaze:
 	def blink(self):
 		# self.colour = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 		# self.colour = (0, 255, 0)
-		print("BLINK")
+		# print("BLINK")
 
 	"""
 	Function to achieve the functionality of blinks
