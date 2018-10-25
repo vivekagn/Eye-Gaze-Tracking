@@ -11,7 +11,7 @@ from imutils import face_utils
 import math
 import random
 from collections import deque
-
+import time
 
 
 class EyeGaze:
@@ -40,7 +40,7 @@ class EyeGaze:
 
 		# Position of centre of eye corresponding to looking at left and right sides of screen
 		self.leftValue = 60
-		self.rightValue = 43
+		self.rightValue = 40
 
 		self.helper = Helper()
 
@@ -59,8 +59,8 @@ class EyeGaze:
 		self.meanRight = 0
 
 		# Upper and lower bounds of mean
-		self.meanUpper = 80
-		self.meanLower = 70
+		self.meanUpper = 75
+		self.meanLower = 65
 
 		self.screenWidth = 1400
 		self.controlArea = np.ones((100, self.screenWidth, 3), np.uint8) * 255
@@ -143,6 +143,7 @@ class EyeGaze:
 				# Get coordinates of 6 eye features
 				leftEye = FaceLandmarks[lStart:lEnd]
 				rightEye = FaceLandmarks[rStart:rEnd]
+
 
 				eyebrowToEyeDistanceRatio = dist.euclidean(leftEye[4], leftEyebrow[2]) / dist.euclidean(rightEye[5], rightEyebrow[2])
 				# print("Dist = {}".format(eyebrowRatio))
@@ -323,6 +324,148 @@ class EyeGaze:
 		# webcam is still in use if python doesn't quit
 		quit()
 
+	def calibrate(self, arg=""):
+		# Use sample video
+		if len(arg) != 0:
+			camera = cv2.VideoCapture(arg)
+		else:
+			camera = cv2.VideoCapture(0)
+
+		leftLook = False
+		leftAvg = 0
+		rightLook = False
+		rightAvg = 0
+		rightCount = 0
+		leftCount = 0
+
+		while camera.isOpened():
+			# Get frame from webcam
+			ret, frame = camera.read()
+
+			if ret == False:
+				break
+
+			# Coordiates of pupil for left and right eyes
+			xL = yL = xR = yR = 0
+
+			# Used for FPS calculation
+			startTime = cv2.getTickCount()
+
+			# Resize and convert to grayscale
+			frame = imutils.resize(frame, width=600)
+			frameGray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+			# Detect faces in frame
+			faces = self.detector(frameGray, 1)
+
+			# loop over the face detections
+			for (i, face) in enumerate(faces):
+				# Obtain facial landmarks
+				FaceLandmarks = self.predictor(frameGray, face)
+				FaceLandmarks = face_utils.shape_to_np(FaceLandmarks)
+
+				# Get first and last index of coordinates corresponding to each eye
+				(lStart, lEnd) = face_utils.FACIAL_LANDMARKS_IDXS["left_eye"]
+				(rStart, rEnd) = face_utils.FACIAL_LANDMARKS_IDXS["right_eye"]
+
+				# Get coordinates of 6 eye features
+				leftEye = FaceLandmarks[lStart:lEnd]
+				rightEye = FaceLandmarks[rStart:rEnd]
+
+				# Calulate aspect ratio of eyes
+				leftEyeRatio = self.helper.eyeRatio(leftEye)
+				rightEyeRatio = self.helper.eyeRatio(rightEye)
+
+				# Get left and right eye
+				lEye = self.helper.eyeRegion(leftEye, frame)
+				rEye = self.helper.eyeRegion(rightEye, frame)
+
+				# Get center of each eye
+				if leftEyeRatio > 0.25:
+					self.helper.get_iris_center(lEye, "Left")
+					# Adjust gamma to suit brightness
+					if self.meanLeft > self.meanUpper:
+						self.gammaLeft += 0.02
+					elif self.meanLeft < self.meanLower:
+						self.gammaLeft -= 0.02
+					meanL, (xL, yL) = self.helper.get_iris_center(lEye, "Left", gamma=self.gammaLeft)
+					self.meanLeft += meanL
+					self.meanLeft = self.meanLeft / 2
+
+				if rightEyeRatio > 0.25:
+					# Adjust gamma to suit brightness
+					if self.meanRight > self.meanUpper:
+						self.gammaRight += 0.02
+					elif self.meanRight < self.meanLower:
+						self.gammaRight -= 0.02
+					meanR, (xR, yR) = self.helper.get_iris_center(rEye, "Right", gamma=self.gammaRight)
+					self.meanRight += meanR
+					self.meanRight = self.meanRight / 2
+
+				# print("{} {}".format(mean,gamma))
+				# print("xL = {}, xR = {}".format(int(xL * 100), int(xR * 100)))
+
+				# Pupil located for both eyes
+				if xL > 0 and xR > 0:
+					x = int((xL + xR) * 50)
+				# print("Left x: {}, y: {} Right x: {}, y: {}".format(int(xL * 100), int(yL * 100), int(xR * 100), int(yR * 100)))
+				# Pupil located only for left eye
+				elif xL > 0:
+					x = int(xL * 100)
+
+				# Pupil located only for right eye
+				elif xR > 0:
+					x = int(xR * 100)
+
+				# Pupil cannot be located for either eye
+				else:
+					x = 0
+
+				# Pupil located for at least one eye
+				# Update control area
+				if x != 0:
+					if cv2.waitKey(10) & 0xFF == ord('l'):
+						print("Record Left")
+						if leftLook == False:
+							
+							leftLook = True
+							rightLook = False
+
+					if cv2.waitKey(10) & 0xFF == ord('r'):
+						if rightLook == False:
+							print("Record Right")
+							rightLook = True
+
+
+					if leftLook:
+						leftCount += 1
+						leftAvg += x
+						leftAvg = leftAvg / 2
+						if leftCount > 60:
+							print("RECORDED LEFT")
+							self.leftValue = int(leftAvg)
+							leftLook = False
+
+					if rightLook:
+						rightCount += 1
+						rightAvg += x
+						rightAvg = rightAvg / 2
+						if rightCount > 60:
+							print("RECORDED RIGHT")
+							rightLook = False
+							self.rightValue = int(rightAvg)
+
+			cv2.imshow("WebCam", frame)
+			if cv2.waitKey(1) & 0xFF == ord('q'):
+				break
+
+		print("L = {} R = {}".format(self.leftValue, self.rightValue))
+
+		camera.release()
+		cv2.destroyAllWindows()
+		# webcam is still in use if python doesn't quit
+		# quit()
+
 	"""
 	Function to achieve the functionality of blinks
 	"""
@@ -330,6 +473,7 @@ class EyeGaze:
 		# self.colour = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
 		# self.colour = (0, 255, 0)
 		# print("BLINK")
+		pass
 
 	"""
 	Function to achieve the functionality of blinks
@@ -371,4 +515,5 @@ if __name__ == '__main__':
 		arg = sys.argv[1]
 	else:
 		arg = ""
+	obj.calibrate(arg)
 	obj.start(arg)
