@@ -367,6 +367,10 @@ class EyeGaze:
 			# Detect faces in frame
 			faces = self.detector(frameGray, 1)
 
+			print("CALIBRATION")
+
+			print("When looking at the left edge of the screen,\npress 'l' to begin calibration of left eye")
+
 			# loop over the face detections
 			for (i, face) in enumerate(faces):
 				# Obtain facial landmarks
@@ -450,8 +454,10 @@ class EyeGaze:
 						leftCount += 1
 						leftAvg += x
 						leftAvg = leftAvg / 2
+						# Find average pupil position for 60 frames
 						if leftCount > 60:
-							print("RECORDED LEFT")
+							print("LEFT CALIBRATED")
+							print("When looking at the right edge of the screen,\npress 'l' to begin calibration of left eye")
 							self.leftValue = int(leftAvg)
 							leftLook = False
 
@@ -459,8 +465,10 @@ class EyeGaze:
 						rightCount += 1
 						rightAvg += x
 						rightAvg = rightAvg / 2
+						# Find average pupil position for 60 frames
 						if rightCount > 60:
-							print("RECORDED RIGHT")
+							print("RIGHT CALIBRATED")
+							print("Press 'q' to start control")
 							rightLook = False
 							self.rightValue = int(rightAvg)
 
