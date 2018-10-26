@@ -352,6 +352,7 @@ class EyeGaze:
 
 		print("CALIBRATION")
 		print("Centre the control window at the top of your screen")
+		print("Select the control window before entering commands")
 		print("When looking at the left edge of the control window,\npress 'l' to begin calibration of left eye")
 
 		while camera.isOpened():
