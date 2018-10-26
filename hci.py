@@ -219,7 +219,7 @@ class EyeGaze:
 					# Find mean of 5 most recent gaze locations
 					meanGaze = int(np.mean(self.gazeLocation))
 
-					diff = abs(700 - meanGaze)
+					diff = abs(420 - meanGaze)
 
 					accuracy += diff
 					accuracy = accuracy / 2
@@ -325,7 +325,7 @@ class EyeGaze:
 			if cv2.waitKey(1) & 0xFF == 27:
 				break
 
-		# print("acc = {}".format(accuracy))
+		print("acc = {}".format(accuracy))
 
 		camera.release()
 		self.earDataFile.close()
@@ -347,6 +347,13 @@ class EyeGaze:
 		rightCount = 0
 		leftCount = 0
 
+			
+		cv2.imshow("Control Window", self.controlArea)
+
+		print("CALIBRATION")
+		print("Centre the control window at the top of your screen")
+		print("When looking at the left edge of the control window,\npress 'l' to begin calibration of left eye")
+
 		while camera.isOpened():
 			# Get frame from webcam
 			ret, frame = camera.read()
@@ -366,10 +373,6 @@ class EyeGaze:
 
 			# Detect faces in frame
 			faces = self.detector(frameGray, 1)
-
-			print("CALIBRATION")
-
-			print("When looking at the left edge of the screen,\npress 'l' to begin calibration of left eye")
 
 			# loop over the face detections
 			for (i, face) in enumerate(faces):
@@ -415,13 +418,11 @@ class EyeGaze:
 					self.meanRight += meanR
 					self.meanRight = self.meanRight / 2
 
-				# print("{} {}".format(mean,gamma))
-				# print("xL = {}, xR = {}".format(int(xL * 100), int(xR * 100)))
 
 				# Pupil located for both eyes
 				if xL > 0 and xR > 0:
 					x = int((xL + xR) * 50)
-				# print("Left x: {}, y: {} Right x: {}, y: {}".format(int(xL * 100), int(yL * 100), int(xR * 100), int(yR * 100)))
+
 				# Pupil located only for left eye
 				elif xL > 0:
 					x = int(xL * 100)
@@ -435,7 +436,7 @@ class EyeGaze:
 					x = 0
 
 				# Pupil located for at least one eye
-				# Update control area
+				# Record pupil position for mean calculation
 				if x != 0:
 					if cv2.waitKey(10) & 0xFF == ord('l'):
 						print("Record Left")
@@ -457,7 +458,7 @@ class EyeGaze:
 						# Find average pupil position for 60 frames
 						if leftCount > 60:
 							print("LEFT CALIBRATED")
-							print("When looking at the right edge of the screen,\npress 'l' to begin calibration of left eye")
+							print("When looking at the right edge of the control window,\npress 'r' to begin calibration of right eye")
 							self.leftValue = int(leftAvg)
 							leftLook = False
 
@@ -533,4 +534,5 @@ if __name__ == '__main__':
 	else:
 		arg = ""
 	obj.calibrate(arg)
+	time.sleep(1.0)
 	obj.start(arg)
